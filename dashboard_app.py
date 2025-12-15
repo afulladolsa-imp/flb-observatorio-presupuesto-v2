@@ -82,6 +82,8 @@ def format_table(df: pd.DataFrame, money_cols=None, ratio_cols=None) -> pd.DataF
     ratio_cols = set(ratio_cols or [])
     out = df.copy()
     for col in out.columns:
+        if col == "snip":
+            continue
         if col in money_cols:
             out[col] = out[col].apply(fmt_money)
         elif col in ratio_cols:
@@ -93,6 +95,30 @@ def format_table(df: pd.DataFrame, money_cols=None, ratio_cols=None) -> pd.DataF
                 else:
                     out[col] = out[col].apply(fmt_int)
     return out
+
+
+SNIP_URL_TMPL = (
+    "https://sistemas.segeplan.gob.gt/guest/"
+    "SNPPKG$PL_PROYECTOS.INFORMACION?prmIdSnip={snip}"
+)
+
+def snip_link(snip):
+    if pd.isna(snip):
+        return "—"
+    try:
+        snip = int(snip)
+        return f'<a href="{SNIP_URL_TMPL.format(snip=snip)}" target="_blank">{snip}</a>'
+    except:
+        return "—"
+    
+def add_snip_link_column(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "snip" in out.columns:
+        out["snip"] = out["snip"].apply(snip_link)
+        # out = out.drop(columns=["snip"])
+    return out
+
+
 
 # =========================
 # Selection state (map filter)
@@ -185,11 +211,15 @@ def render_map(df_points: pd.DataFrame, title: str):
     # performance cap
     max_markers = 5000
     pts = df_points.head(max_markers)
+    
 
     for _, r in pts.iterrows():
+        snip_val = r.get("snip", "")
+        snip_href = SNIP_URL_TMPL.format(snip=snip_val)
         popup_html = f"""
         <div style="font-size:12px; max-width:360px;">
-          <b>SNIP:</b> {r.get("snip","")}<br/>
+          <b>SNIP:</b>
+          <a href="{snip_href}" target="_blank">{snip_val}</a><br/>
           <b>Proyecto:</b> {str(r.get("nombre_de_proyecto",""))[:120]}<br/>
           <b>Ubicación:</b> {r.get("departamento","")} / {r.get("municipio","")}<br/>
           <b>Estado auditoría:</b> {r.get("estado_auditoria","")}<br/>
@@ -283,6 +313,7 @@ with tab_over:
     ]
     cols = [c for c in cols if c in top.columns]
     disp2 = format_table(top[cols], money_cols=MONEY_COLS_SNIP, ratio_cols=RATIO_COLS_SNIP)
+
     sel2 = st.dataframe(
         disp2, use_container_width=True, hide_index=True,
         on_select="rerun", selection_mode="single-row"
